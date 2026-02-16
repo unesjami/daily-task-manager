@@ -1,0 +1,916 @@
+<!doctype html>
+<html lang="en" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Daily Task Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/_sdk/element_sdk.js"></script>
+  <script src="/_sdk/data_sdk.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+    body {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    * {
+      font-family: 'Quicksand', sans-serif;
+    }
+    
+    /* Task Card Animations */
+    .task-card {
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+    .task-card:hover {
+      transform: translateY(-4px) scale(1.02);
+      box-shadow: 0 12px 24px rgba(0,0,0,0.08);
+    }
+    .task-card.completing {
+      animation: completeTask 0.6s ease-out;
+    }
+    @keyframes completeTask {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+      100% { transform: scale(1); }
+    }
+    .task-card.deleting {
+      animation: deleteTask 0.5s ease-out forwards;
+    }
+    @keyframes deleteTask {
+      0% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.1) rotate(5deg); opacity: 0.5; }
+      100% { transform: scale(0.8) rotate(-5deg); opacity: 0; }
+    }
+    
+    /* Button Animations */
+    .btn-hover {
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+    .btn-hover:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+    }
+    .btn-hover:active {
+      transform: translateY(0);
+    }
+    
+    /* Fade In Animation */
+    .fade-in {
+      animation: fadeIn 0.5s ease-out;
+    }
+    @keyframes fadeIn {
+      from { 
+        opacity: 0; 
+        transform: translateY(-20px) scale(0.95); 
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0) scale(1); 
+      }
+    }
+    
+    /* Add Task Animation */
+    .adding-task {
+      animation: addTask 0.4s ease-out;
+    }
+    @keyframes addTask {
+      0% { 
+        opacity: 0; 
+        transform: translateY(20px);
+      }
+      100% { 
+        opacity: 1; 
+        transform: translateY(0);
+      }
+    }
+    
+    /* Input Focus Animation */
+    .input-field {
+      transition: all 0.3s ease;
+    }
+    .input-field:focus {
+      outline: none;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
+    }
+    
+    /* Progress Circle */
+    .progress-ring-circle {
+      transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+      transform: rotate(-90deg);
+      transform-origin: 50% 50%;
+    }
+    
+    /* Completed Task Styling */
+    .task-completed {
+      opacity: 0.6;
+    }
+    .task-completed .task-text {
+      text-decoration: line-through;
+      opacity: 0.7;
+    }
+    
+    /* Checkmark Animation */
+    .checkmark-animation {
+      animation: checkmark 0.4s ease-out;
+    }
+    @keyframes checkmark {
+      0% { transform: scale(0) rotate(-45deg); }
+      50% { transform: scale(1.2) rotate(5deg); }
+      100% { transform: scale(1) rotate(0deg); }
+    }
+    
+    /* Task number badge */
+    .task-number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      font-weight: bold;
+      font-size: 14px;
+      margin-right: 12px;
+    }
+    
+    /* Action buttons container */
+    .action-buttons {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    
+    /* Icon button style */
+    .icon-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+    }
+    
+    .icon-btn:hover {
+      transform: scale(1.1);
+    }
+  </style>
+  <style>@view-transition { navigation: auto; }</style>
+ </head>
+ <body class="h-full">
+  <div id="app-wrapper" class="h-full w-full overflow-hidden flex flex-col" style="background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%);">
+   <!-- Header -->
+   <header class="flex-shrink-0 px-6 py-5 w-full">
+    <div class="w-full px-6">
+     <div class="flex items-center justify-between">
+      <div>
+       <h1 id="page-title" class="text-3xl font-bold mb-1" style="color: #5b4e7d;">Daily Task Manager</h1>
+       <p id="date-display" class="text-sm font-medium" style="color: #7d6fa3;"></p>
+       <p id="renewal-info" class="text-xs font-medium mt-1" style="color: #7d6fa3;">
+        Tasks reset as new each day
+       </p>
+      </div>
+      <!-- Progress Circle -->
+      <div class="flex items-center gap-6">
+        <div class="text-center">
+          <div class="text-2xl font-bold" style="color: #5b4e7d;" id="task-stats">0/0</div>
+          <div class="text-xs font-medium" style="color: #7d6fa3;">Done/Total</div>
+        </div>
+        <div class="relative">
+         <svg class="transform" width="90" height="90">
+          <circle cx="45" cy="45" r="38" stroke="#ffffff" stroke-width="6" fill="none" opacity="0.3" />
+          <circle id="progress-circle" class="progress-ring-circle" cx="45" cy="45" r="38" stroke="#9b87c4" stroke-width="6" fill="none" stroke-dasharray="238.76" stroke-dashoffset="238.76" stroke-linecap="round" />
+         </svg>
+         <div class="absolute inset-0 flex flex-col items-center justify-center">
+          <div class="text-2xl font-bold" style="color: #5b4e7d;" id="progress-percent">0%</div>
+          <div class="text-xs font-medium" style="color: #7d6fa3;">Progress</div>
+         </div>
+        </div>
+      </div>
+     </div>
+    </div>
+   </header>
+   
+   <!-- Main Content Area -->
+   <main class="flex-1 overflow-auto w-full">
+    <div class="w-full px-6 pb-6">
+     <!-- Add Task Section -->
+     <div class="mb-5 p-4 rounded-2xl" style="background-color: rgba(255,255,255,0.85); backdrop-filter: blur(10px);">
+      <form id="add-task-form" class="flex gap-3">
+       <input type="text" id="task-input" placeholder="Enter a new task..." class="input-field flex-1 px-4 py-2.5 rounded-xl border-2 text-sm outline-none" style="border-color: #d4c5f0; color: #5b4e7d; background-color: #ffffff;" autocomplete="off">
+       <button type="submit" id="add-btn" class="btn-hover px-5 py-2.5 rounded-xl font-semibold text-sm relative" style="background-color: #9b87c4; color: #ffffff;">
+        <span id="add-button-text" class="relative">Add Task</span>
+       </button>
+      </form>
+      <div id="limit-warning" class="hidden mt-3 text-sm text-center py-2 px-3 rounded-lg font-medium" style="background-color: #ffe4b5; color: #8b4513;">
+       ⚠️ Maximum limit of 999 tasks reached
+      </div>
+     </div>
+     
+     <!-- Tasks Grid -->
+     <div id="task-container" class="w-full">
+      <!-- Empty State -->
+      <div id="empty-state" class="text-center py-16 w-full">
+       <p id="empty-state-message" class="text-lg font-light" style="color: #7d6fa3;">No tasks yet. Add your first task above!</p>
+      </div>
+      <!-- Tasks Grid -->
+      <div id="task-grid" class="hidden w-full grid gap-4"></div>
+     </div>
+    </div>
+   </main>
+  </div>
+
+  <script>
+    // Default configuration
+    const defaultConfig = {
+      page_title: "Daily Task Manager",
+      add_button_text: "Add Task",
+      empty_state_message: "No tasks yet. Add your first task above!",
+      background_gradient_start: "#e0c3fc",
+      background_gradient_end: "#8ec5fc",
+      surface_color: "#ffffff",
+      text_color: "#5b4e7d",
+      primary_color: "#9b87c4",
+      accent_color: "#fb923c",
+      font_family: "Quicksand",
+      font_size: 16
+    };
+
+    let tasks = [];
+    let currentRecordCount = 0;
+    
+    // Storage key for localStorage
+    const STORAGE_KEY = 'dailyTaskManager_tasks';
+    const CONFIG_KEY = 'dailyTaskManager_config';
+
+    // Save tasks to localStorage
+    function saveTasksToStorage() {
+      try {
+        const tasksToSave = tasks.map(task => ({
+          text: task.text,
+          quantity: task.quantity,
+          completed_today: task.completed_today,
+          last_date: task.last_date,
+          created_at: task.created_at,
+          __backendId: task.__backendId
+        }));
+        
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(tasksToSave));
+        console.log('Tasks saved to localStorage:', tasksToSave.length);
+      } catch (error) {
+        console.error('Error saving tasks to localStorage:', error);
+      }
+    }
+    
+    // Load tasks from localStorage
+    function loadTasksFromStorage() {
+      try {
+        const savedTasks = localStorage.getItem(STORAGE_KEY);
+        if (savedTasks) {
+          const parsedTasks = JSON.parse(savedTasks);
+          console.log('Tasks loaded from localStorage:', parsedTasks.length);
+          return parsedTasks;
+        }
+      } catch (error) {
+        console.error('Error loading tasks from localStorage:', error);
+      }
+      return [];
+    }
+    
+    // Save configuration to localStorage
+    function saveConfigToStorage(config) {
+      try {
+        localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+      } catch (error) {
+        console.error('Error saving config to localStorage:', error);
+      }
+    }
+    
+    // Load configuration from localStorage
+    function loadConfigFromStorage() {
+      try {
+        const savedConfig = localStorage.getItem(CONFIG_KEY);
+        if (savedConfig) {
+          return JSON.parse(savedConfig);
+        }
+      } catch (error) {
+        console.error('Error loading config from localStorage:', error);
+      }
+      return null;
+    }
+
+    // Mock SDK for testing if not available
+    if (!window.dataSdk) {
+      console.warn('Using mock dataSdk for testing');
+      window.dataSdk = {
+        init: async (handler) => {
+          console.log('Mock dataSdk init called');
+          
+          // Load tasks from localStorage
+          const savedTasks = loadTasksFromStorage();
+          
+          setTimeout(() => {
+            if (handler && handler.onDataChanged) {
+              handler.onDataChanged(savedTasks);
+            }
+          }, 100);
+          return { isOk: true };
+        },
+        create: async (task) => {
+          console.log('Mock create called with:', task);
+          const newTask = {
+            ...task,
+            __backendId: 'mock-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9)
+          };
+          tasks.unshift(newTask); // Add to beginning
+          currentRecordCount = tasks.length;
+          
+          // Save to localStorage
+          saveTasksToStorage();
+          
+          renderTasks();
+          updateProgress();
+          updateLimitWarning();
+          return { isOk: true };
+        },
+        update: async (task) => {
+          console.log('Mock update called with:', task);
+          const index = tasks.findIndex(t => t.__backendId === task.__backendId);
+          if (index !== -1) {
+            tasks[index] = { ...task };
+            
+            // Save to localStorage
+            saveTasksToStorage();
+            
+            renderTasks();
+            updateProgress();
+          }
+          return { isOk: true };
+        },
+        delete: async (task) => {
+          console.log('Mock delete called with:', task);
+          tasks = tasks.filter(t => t.__backendId !== task.__backendId);
+          currentRecordCount = tasks.length;
+          
+          // Save to localStorage
+          saveTasksToStorage();
+          
+          renderTasks();
+          updateProgress();
+          updateLimitWarning();
+          return { isOk: true };
+        },
+        get: async () => ({ isOk: true, data: tasks })
+      };
+    }
+
+    if (!window.elementSdk) {
+      console.warn('Using mock elementSdk for testing');
+      window.elementSdk = {
+        init: (options) => {
+          console.log('Mock elementSdk init called with:', options);
+          
+          // Load saved config
+          const savedConfig = loadConfigFromStorage();
+          if (savedConfig && options.onConfigChange) {
+            setTimeout(() => {
+              options.onConfigChange({ ...defaultConfig, ...savedConfig });
+            }, 50);
+          } else if (options.onConfigChange) {
+            setTimeout(() => {
+              options.onConfigChange(defaultConfig);
+            }, 50);
+          }
+          
+          return { isOk: true };
+        },
+        setConfig: (config) => {
+          console.log('Mock setConfig called with:', config);
+          // Save config to localStorage
+          saveConfigToStorage(config);
+          
+          // Also update the UI if needed
+          if (window.elementSdk && window.elementSdk.config) {
+            window.elementSdk.config = config;
+          }
+        }
+      };
+    }
+
+    // Display today's date
+    function updateDate() {
+      const today = new Date();
+      const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+      document.getElementById('date-display').textContent = today.toLocaleDateString('en-US', options);
+    }
+    updateDate();
+
+    // Get today's date string (YYYY-MM-DD)
+    function getTodayDateString() {
+      const today = new Date();
+      return today.toISOString().split('T')[0];
+    }
+
+    // Data handler for SDK - FIXED VERSION: Creates fresh tasks each day
+    const dataHandler = {
+      async onDataChanged(data) {
+        console.log('onDataChanged called with data:', data);
+        const today = getTodayDateString();
+        
+        // Check if we need to create fresh tasks for the new day
+        if (data.length > 0 && data[0].last_date !== today) {
+          console.log('New day detected, creating fresh tasks');
+          
+          // Delete all old tasks
+          const deletePromises = data.map(task => window.dataSdk.delete(task));
+          await Promise.all(deletePromises);
+          
+          // Create fresh copies of all tasks for the new day
+          const createPromises = [];
+          const todayISO = new Date().toISOString();
+          
+          for (const task of data) {
+            const freshTask = {
+              text: task.text,
+              quantity: task.quantity,
+              completed_today: 0, // Fresh start for new day
+              last_date: today,
+              created_at: todayISO // Set to today so it appears as new
+            };
+            
+            createPromises.push(window.dataSdk.create(freshTask));
+          }
+          
+          await Promise.all(createPromises);
+          
+          // Refresh data
+          if (window.dataSdk.get) {
+            const refreshedResult = await window.dataSdk.get();
+            if (refreshedResult.isOk) {
+              tasks = refreshedResult.data;
+              currentRecordCount = tasks.length;
+              renderTasks();
+              updateProgress();
+              updateLimitWarning();
+            }
+          }
+        } else {
+          // If it's the same day, just display current data
+          tasks = data;
+          currentRecordCount = data.length;
+          renderTasks();
+          updateProgress();
+          updateLimitWarning();
+        }
+      }
+    };
+
+    // Calculate optimal grid layout
+    function calculateGridLayout(taskCount) {
+      if (taskCount === 0) return { columns: 1, rows: 1 };
+      if (taskCount === 1) return { columns: 1, rows: 1 };
+      if (taskCount === 2) return { columns: 2, rows: 1 };
+      if (taskCount <= 4) return { columns: 2, rows: 2 };
+      if (taskCount <= 6) return { columns: 3, rows: 2 };
+      if (taskCount <= 9) return { columns: 3, rows: 3 };
+      if (taskCount <= 12) return { columns: 4, rows: 3 };
+      if (taskCount <= 16) return { columns: 4, rows: 4 };
+      if (taskCount <= 20) return { columns: 5, rows: 4 };
+      return { columns: 5, rows: Math.ceil(taskCount / 5) };
+    }
+
+    // Update progress circle and task stats
+    function updateProgress() {
+      const totalTasks = tasks.reduce((sum, task) => sum + task.quantity, 0);
+      const completedTasks = tasks.reduce((sum, task) => sum + task.completed_today, 0);
+      const percent = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
+
+      document.getElementById('progress-percent').textContent = `${percent}%`;
+      document.getElementById('task-stats').textContent = `${completedTasks}/${totalTasks}`;
+      
+      const circle = document.getElementById('progress-circle');
+      const circumference = 238.76;
+      const offset = circumference - (percent / 100) * circumference;
+      circle.style.strokeDashoffset = offset;
+    }
+
+    // Render tasks to DOM
+    function renderTasks() {
+      console.log('renderTasks called, tasks count:', tasks.length);
+      const taskGrid = document.getElementById('task-grid');
+      const emptyState = document.getElementById('empty-state');
+
+      if (tasks.length === 0) {
+        emptyState.classList.remove('hidden');
+        taskGrid.classList.add('hidden');
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+      taskGrid.classList.remove('hidden');
+
+      // Calculate grid layout
+      const layout = calculateGridLayout(tasks.length);
+      taskGrid.style.gridTemplateColumns = `repeat(${layout.columns}, 1fr)`;
+
+      // Create a map of existing elements
+      const existingItems = new Map(
+        [...taskGrid.children].map(el => [el.dataset.taskId, el])
+      );
+
+      // Sort tasks by creation date (newest first)
+      const sortedTasks = [...tasks].sort((a, b) => 
+        new Date(b.created_at) - new Date(a.created_at)
+      );
+
+      // Update or create task elements
+      sortedTasks.forEach((task, index) => {
+        if (existingItems.has(task.__backendId)) {
+          const existingEl = existingItems.get(task.__backendId);
+          updateTaskElement(existingEl, task, index + 1);
+          existingItems.delete(task.__backendId);
+          taskGrid.appendChild(existingEl);
+        } else {
+          const newEl = createTaskElement(task, index + 1);
+          taskGrid.appendChild(newEl);
+        }
+      });
+
+      // Remove deleted tasks
+      existingItems.forEach(el => el.remove());
+    }
+
+    function createTaskElement(task, taskNumber) {
+      const config = window.elementSdk?.config || defaultConfig;
+      const isFullyCompleted = task.completed_today >= task.quantity;
+
+      const div = document.createElement('div');
+      div.className = `task-card p-4 rounded-xl adding-task ${isFullyCompleted ? 'task-completed' : ''}`;
+      div.style.backgroundColor = config.surface_color || defaultConfig.surface_color;
+      div.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+      div.dataset.taskId = task.__backendId;
+
+      div.innerHTML = `
+        <div class="flex items-center justify-between">
+          <div class="flex items-center flex-1">
+            <span class="task-number" style="background-color: ${config.primary_color || defaultConfig.primary_color}; color: #ffffff;">
+              ${taskNumber}
+            </span>
+            <p class="task-text font-medium leading-snug break-words flex-1" style="color: ${config.text_color || defaultConfig.text_color};">${escapeHtml(task.text)}</p>
+          </div>
+          <div class="action-buttons">
+            ${!isFullyCompleted ? `
+            <button class="done-btn icon-btn" style="background-color: ${config.primary_color || defaultConfig.primary_color};">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </button>
+            ` : `
+            <div class="icon-btn checkmark-animation" style="background-color: ${config.primary_color || defaultConfig.primary_color};">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            `}
+            <button class="delete-btn icon-btn" style="background-color: ${config.text_color || defaultConfig.text_color}; opacity: 0.3;">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      `;
+
+      // Done button - increases completed_today by 1
+      const doneBtn = div.querySelector('.done-btn');
+      if (doneBtn) {
+        doneBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          completeOne(task, div);
+        });
+      }
+      
+      // Delete button
+      const deleteBtn = div.querySelector('.delete-btn');
+      deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteTask(task, div);
+      });
+
+      return div;
+    }
+
+    function updateTaskElement(el, task, taskNumber) {
+      const config = window.elementSdk?.config || defaultConfig;
+      const isFullyCompleted = task.completed_today >= task.quantity;
+
+      el.className = `task-card p-4 rounded-xl ${isFullyCompleted ? 'task-completed' : ''}`;
+      el.style.backgroundColor = config.surface_color || defaultConfig.surface_color;
+
+      const taskNumberEl = el.querySelector('.task-number');
+      taskNumberEl.textContent = taskNumber;
+      taskNumberEl.style.backgroundColor = config.primary_color || defaultConfig.primary_color;
+
+      const taskText = el.querySelector('.task-text');
+      taskText.textContent = task.text;
+      taskText.style.color = config.text_color || defaultConfig.text_color;
+
+      // Update action buttons
+      const actionButtons = el.querySelector('.action-buttons');
+      actionButtons.innerHTML = !isFullyCompleted ? `
+        <button class="done-btn icon-btn" style="background-color: ${config.primary_color || defaultConfig.primary_color};">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        </button>
+      ` : `
+        <div class="icon-btn checkmark-animation" style="background-color: ${config.primary_color || defaultConfig.primary_color};">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+      `;
+      
+      actionButtons.innerHTML += `
+        <button class="delete-btn icon-btn" style="background-color: ${config.text_color || defaultConfig.text_color}; opacity: 0.3;">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      `;
+
+      // Re-attach event listeners
+      const doneBtn = actionButtons.querySelector('.done-btn');
+      if (doneBtn) {
+        doneBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          completeOne(task, el);
+        });
+      }
+
+      const deleteBtn = actionButtons.querySelector('.delete-btn');
+      deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteTask(task, el);
+      });
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function updateLimitWarning() {
+      const warning = document.getElementById('limit-warning');
+      if (currentRecordCount >= 999) {
+        warning.classList.remove('hidden');
+      } else {
+        warning.classList.add('hidden');
+      }
+    }
+
+    async function addTask(text) {
+      console.log('addTask called with text:', text);
+      
+      if (currentRecordCount >= 999) {
+        console.log('Limit reached');
+        return;
+      }
+
+      const input = document.getElementById('task-input');
+      const addBtn = document.getElementById('add-btn');
+      const originalText = addBtn.querySelector('span').textContent;
+      
+      addBtn.disabled = true;
+      addBtn.querySelector('span').textContent = 'Adding...';
+      addBtn.style.opacity = '0.6';
+
+      const today = getTodayDateString();
+      const taskData = {
+        text: text,
+        quantity: 1,
+        completed_today: 0,
+        last_date: today,
+        created_at: new Date().toISOString()
+      };
+      
+      console.log('Creating task with data:', taskData);
+
+      try {
+        const result = await window.dataSdk.create(taskData);
+        
+        console.log('Create result:', result);
+        
+        if (result.isOk) {
+          console.log('Task created successfully');
+          input.value = '';
+        } else {
+          console.error('Failed to add task:', result.error);
+        }
+      } catch (error) {
+        console.error('Error in addTask:', error);
+      } finally {
+        addBtn.disabled = false;
+        addBtn.querySelector('span').textContent = originalText;
+        addBtn.style.opacity = '1';
+      }
+    }
+
+    async function completeOne(task, element) {
+      element.classList.add('completing');
+
+      setTimeout(async () => {
+        try {
+          const result = await window.dataSdk.update({
+            ...task,
+            completed_today: task.completed_today + 1
+          });
+
+          if (!result.isOk) {
+            console.error('Failed to update task');
+          }
+        } catch (error) {
+          console.error('Error in completeOne:', error);
+        }
+        
+        element.classList.remove('completing');
+      }, 300);
+    }
+
+    async function deleteTask(task, element) {
+      element.classList.add('deleting');
+
+      setTimeout(async () => {
+        try {
+          const result = await window.dataSdk.delete(task);
+
+          if (!result.isOk) {
+            console.error('Failed to delete task');
+            element.classList.remove('deleting');
+          }
+        } catch (error) {
+          console.error('Error in deleteTask:', error);
+          element.classList.remove('deleting');
+        }
+      }, 500);
+    }
+
+    // Form submission
+    document.getElementById('add-task-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      const input = document.getElementById('task-input');
+      const text = input.value.trim();
+      
+      if (text) {
+        console.log('Form submitted with text:', text);
+        await addTask(text);
+      }
+      
+      return false;
+    });
+
+    // Element SDK config change handler
+    async function onConfigChange(config) {
+      console.log('onConfigChange called with:', config);
+      
+      const wrapper = document.getElementById('app-wrapper');
+      const pageTitle = document.getElementById('page-title');
+      const dateDisplay = document.getElementById('date-display');
+      const renewalInfo = document.getElementById('renewal-info');
+      const addButtonText = document.getElementById('add-button-text');
+      const emptyMessage = document.getElementById('empty-state-message');
+      const input = document.getElementById('task-input');
+      const addBtn = document.getElementById('add-btn');
+      const progressPercent = document.getElementById('progress-percent');
+      const taskStats = document.getElementById('task-stats');
+
+      // Apply gradient background
+      const gradientStart = config.background_gradient_start || defaultConfig.background_gradient_start;
+      const gradientEnd = config.background_gradient_end || defaultConfig.background_gradient_end;
+      wrapper.style.background = `linear-gradient(135deg, ${gradientStart} 0%, ${gradientEnd} 100%)`;
+
+      // Apply text content
+      pageTitle.textContent = config.page_title || defaultConfig.page_title;
+      addButtonText.textContent = config.add_button_text || defaultConfig.add_button_text;
+      emptyMessage.textContent = config.empty_state_message || defaultConfig.empty_state_message;
+
+      // Apply colors
+      pageTitle.style.color = config.text_color || defaultConfig.text_color;
+      dateDisplay.style.color = config.primary_color || defaultConfig.primary_color;
+      renewalInfo.style.color = config.primary_color || defaultConfig.primary_color;
+      progressPercent.style.color = config.text_color || defaultConfig.text_color;
+      taskStats.style.color = config.text_color || defaultConfig.text_color;
+      input.style.color = config.text_color || defaultConfig.text_color;
+      input.style.borderColor = config.primary_color || defaultConfig.primary_color;
+      addBtn.style.backgroundColor = config.primary_color || defaultConfig.primary_color;
+      emptyMessage.style.color = config.primary_color || defaultConfig.primary_color;
+
+      const progressCircle = document.getElementById('progress-circle');
+      progressCircle.setAttribute('stroke', config.primary_color || defaultConfig.primary_color);
+
+      // Apply font
+      const fontFamily = config.font_family || defaultConfig.font_family;
+      document.querySelectorAll('*').forEach(el => {
+        el.style.fontFamily = `${fontFamily}, sans-serif`;
+      });
+
+      // Apply font size
+      const baseSize = config.font_size || defaultConfig.font_size;
+      pageTitle.style.fontSize = `${baseSize * 1.875}px`;
+      dateDisplay.style.fontSize = `${baseSize * 0.875}px`;
+      renewalInfo.style.fontSize = `${baseSize * 0.75}px`;
+      input.style.fontSize = `${baseSize * 0.875}px`;
+      addButtonText.style.fontSize = `${baseSize * 0.875}px`;
+      emptyMessage.style.fontSize = `${baseSize * 1.125}px`;
+
+      // Re-render tasks with new styling
+      renderTasks();
+    }
+
+    // Initialize SDKs
+    async function init() {
+      console.log('Initializing app...');
+      
+      // Initialize Element SDK
+      if (window.elementSdk) {
+        const elementResult = await window.elementSdk.init({
+          defaultConfig,
+          onConfigChange,
+          mapToCapabilities: (config) => ({
+            recolorables: [
+              {
+                get: () => config.background_gradient_start || defaultConfig.background_gradient_start,
+                set: (value) => { config.background_gradient_start = value; window.elementSdk.setConfig({ background_gradient_start: value }); }
+              },
+              {
+                get: () => config.surface_color || defaultConfig.surface_color,
+                set: (value) => { config.surface_color = value; window.elementSdk.setConfig({ surface_color: value }); }
+              },
+              {
+                get: () => config.text_color || defaultConfig.text_color,
+                set: (value) => { config.text_color = value; window.elementSdk.setConfig({ text_color: value }); }
+              },
+              {
+                get: () => config.primary_color || defaultConfig.primary_color,
+                set: (value) => { config.primary_color = value; window.elementSdk.setConfig({ primary_color: value }); }
+              },
+              {
+                get: () => config.accent_color || defaultConfig.accent_color,
+                set: (value) => { config.accent_color = value; window.elementSdk.setConfig({ accent_color: value }); }
+              }
+            ],
+            borderables: [],
+            fontEditable: {
+              get: () => config.font_family || defaultConfig.font_family,
+              set: (value) => { config.font_family = value; window.elementSdk.setConfig({ font_family: value }); }
+            },
+            fontSizeable: {
+              get: () => config.font_size || defaultConfig.font_size,
+              set: (value) => { config.font_size = value; window.elementSdk.setConfig({ font_size: value }); }
+            }
+          }),
+          mapToEditPanelValues: (config) => new Map([
+            ["page_title", config.page_title || defaultConfig.page_title],
+            ["add_button_text", config.add_button_text || defaultConfig.add_button_text],
+            ["empty_state_message", config.empty_state_message || defaultConfig.empty_state_message]
+          ])
+        });
+        
+        console.log('Element SDK initialized:', elementResult);
+      }
+
+      // Initialize Data SDK
+      if (window.dataSdk) {
+        const dataResult = await window.dataSdk.init(dataHandler);
+        console.log('Data SDK initialized:', dataResult);
+        
+        if (!dataResult.isOk) {
+          console.error('Failed to initialize data SDK');
+        }
+      }
+      
+      // Add beforeunload event to save tasks before closing
+      window.addEventListener('beforeunload', () => {
+        console.log('Saving tasks before page unload...');
+        saveTasksToStorage();
+      });
+    }
+
+    // Initialize when DOM is loaded
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('DOM loaded, initializing app...');
+      init();
+    });
+  </script>
+ </body>
+</html>
