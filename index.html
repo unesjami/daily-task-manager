@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="en" class="h-full">
  <head>
-  <link rel="icon" type="image/png" href="https://i.ibb.co/sJJTVv0y/logo2.png">
+   <link rel="icon" type="image/png" href="https://i.ibb.co/sJJTVv0y/logo2.png">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Daily Task Manager - Persistent</title>
+  <title>Daily Task Manager - Daily Reset</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="/_sdk/element_sdk.js"></script>
   <script src="/_sdk/data_sdk.js"></script>
@@ -184,6 +184,18 @@
       box-shadow: 0 6px 16px rgba(0,0,0,0.15);
     }
     
+    /* Daily reset indicator */
+    .reset-indicator {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-left: 10px;
+      background-color: rgba(255,255,255,0.2);
+      backdrop-filter: blur(5px);
+    }
+    
     /* Cloud backup button */
     .cloud-backup-btn {
       position: fixed;
@@ -254,10 +266,13 @@
     <div class="w-full px-6">
      <div class="flex items-center justify-between">
       <div>
-       <h1 id="page-title" class="text-3xl font-bold mb-1" style="color: #5b4e7d;">Daily Task Manager</h1>
+       <div class="flex items-center">
+        <h1 id="page-title" class="text-3xl font-bold mb-1" style="color: #5b4e7d;">Daily Task Manager</h1>
+        <span id="reset-indicator" class="reset-indicator" style="color: #5b4e7d;">✨ Daily Reset</span>
+       </div>
        <p id="date-display" class="text-sm font-medium" style="color: #7d6fa3;"></p>
        <p id="renewal-info" class="text-xs font-medium mt-1" style="color: #7d6fa3;">
-        Tasks saved permanently - never deleted
+        Tasks reset to undone every day
        </p>
       </div>
       <!-- Progress Circle -->
@@ -312,7 +327,7 @@
 
   <!-- Storage Status Indicator -->
   <div id="storage-status" class="storage-status" style="background-color: rgba(155, 135, 196, 0.9); color: white;" onclick="showStorageInfo()">
-    💾 Saving locally...
+    💾 Saving...
   </div>
 
   <!-- Cloud Backup Button -->
@@ -369,6 +384,7 @@
     const STORAGE_KEY = 'dailyTaskManager_tasks';
     const CONFIG_KEY = 'dailyTaskManager_config';
     const BACKUP_KEY = 'dailyTaskManager_lastBackup';
+    const LAST_DATE_KEY = 'dailyTaskManager_lastDate';
 
     // IndexedDB setup
     const DB_NAME = 'TaskManagerDB';
@@ -788,14 +804,74 @@
       return today.toISOString().split('T')[0];
     }
 
-    // Data handler - REMOVED AUTO-DELETION
+    // Check if date has changed and reset completion status
+    async function checkAndResetForNewDay() {
+      const today = getTodayDateString();
+      const lastDate = localStorage.getItem(LAST_DATE_KEY);
+      
+      // If it's a new day and we have tasks
+      if (lastDate !== today && tasks.length > 0) {
+        console.log('New day detected! Resetting task completion status...');
+        
+        // Reset completed_today for all tasks to 0
+        const updatedTasks = tasks.map(task => ({
+          ...task,
+          completed_today: 0,
+          last_date: today
+        }));
+        
+        // Update each task in the dataSdk
+        const updatePromises = updatedTasks.map(task => window.dataSdk.update(task));
+        await Promise.all(updatePromises);
+        
+        // Update local tasks array
+        tasks = updatedTasks;
+        
+        // Save to storage
+        await saveToAllStorage();
+        
+        // Update last date
+        localStorage.setItem(LAST_DATE_KEY, today);
+        
+        // Show notification
+        showResetNotification();
+        
+        // Re-render
+        renderTasks();
+        updateProgress();
+      }
+      
+      // Always update last date if not set
+      if (!lastDate) {
+        localStorage.setItem(LAST_DATE_KEY, today);
+      }
+    }
+
+    // Show reset notification
+    function showResetNotification() {
+      const resetIndicator = document.getElementById('reset-indicator');
+      resetIndicator.style.backgroundColor = '#9b87c4';
+      resetIndicator.style.color = 'white';
+      resetIndicator.textContent = '✨ Tasks Reset!';
+      
+      setTimeout(() => {
+        resetIndicator.style.backgroundColor = 'rgba(255,255,255,0.2)';
+        resetIndicator.style.color = '#5b4e7d';
+        resetIndicator.textContent = '✨ Daily Reset';
+      }, 3000);
+    }
+
+    // Data handler - NOW WITH DAILY RESET
     const dataHandler = {
       async onDataChanged(data) {
         console.log('onDataChanged called with data:', data);
         
-        // Simply display the data - NO AUTO-DELETION
         tasks = data;
         currentRecordCount = data.length;
+        
+        // Check if we need to reset for a new day
+        await checkAndResetForNewDay();
+        
         renderTasks();
         updateProgress();
         updateLimitWarning();
@@ -1170,6 +1246,22 @@
       renderTasks();
     }
 
+    // Check for date change periodically
+    function startDailyResetChecker() {
+      // Check immediately
+      checkAndResetForNewDay();
+      
+      // Check every minute
+      setInterval(checkAndResetForNewDay, 60000);
+      
+      // Also check when tab becomes visible again
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+          checkAndResetForNewDay();
+        }
+      });
+    }
+
     // Initialize SDKs
     async function init() {
       console.log('Initializing app...');
@@ -1234,6 +1326,9 @@
           console.error('Failed to initialize data SDK');
         }
       }
+      
+      // Start the daily reset checker
+      startDailyResetChecker();
       
       // Add beforeunload event to save tasks before closing
       window.addEventListener('beforeunload', () => {
